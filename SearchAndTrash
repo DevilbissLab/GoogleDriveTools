@@ -1,0 +1,88 @@
+# Find and trash files that match a "search list"
+# import pdb; pdb.set_trace() # << for debugging
+# https://cloud.google.com/logging/docs/setup/python
+
+import os
+import hashlib
+from pathlib import Path
+import logging
+from google.colab import drive
+
+# prompt: access google drive
+try:
+  drive.mount('/gdrive')
+except Exception as e:
+  drive.mount('/gdrive', force_remount=True)
+  print(f"Failed to mount: {file_path}. Error: {e}")
+
+# print to stdout
+!ls "/gdrive/My Drive/"
+
+# Define the partial name you're looking for in drive
+search_list = ['_CH1.tif','_CH2.tif','_CH3.tif','_CH4.tif']  # Change this to your desired substring
+
+# Define the folder path
+GOOGLE_DRIVE_PATH = "/gdrive/My Drive/"
+FOLDER_PATH = GOOGLE_DRIVE_PATH + "My Raw Data/Project/MySubFolder/"
+
+def delete_file(file_path, logger):
+    try:
+        os.remove(file_path)
+        #open(file_path, 'w').close() #overwrite and make the file blank instead - ref: https://stackoverflow.com/a/4914288/3553367
+        #os.remove(file_path) #delete the blank file from google drive will move the file to bin instead
+        #print(f"DELETED - {file_path}")
+        text = 'DELETED - ' + file_path
+        logger.info(text)
+    except Exception as e:
+        #print(f"Failed to delete file: {file_path}. Error: {e}")
+        text = 'Failed to delete file: ' + file_path + '. Error: ' + str(e)
+        logger.error(text)
+
+def main():
+# Define a logger
+# logger.info('This message has a date/time timestamp')
+# The functions debug(), info(), warning(), error() and critical() will call basicConfig() automatically if no handlers are defined for the root logger
+      logger = logging.getLogger('MyLogger')
+      logger.propagate = False # do not pass logs to the default logger
+
+      log_handler = logging.StreamHandler()
+      log_formatter = logging.Formatter('')
+      log_handler.setFormatter(log_formatter)
+      logger.addHandler(log_handler)
+      logger.setLevel(logging.INFO)
+
+      logf_handler = logging.FileHandler(FOLDER_PATH + 'CleanKeyanceExtraImageChannels.log', mode='a')
+      logf_format = logging.Formatter('%(asctime)s - %(message)s')
+      logf_handler.setFormatter(logf_format)
+      logger.addHandler(logf_handler)
+      logf_handler.setLevel(logging.DEBUG)
+
+      #print('Started Main')
+      logger.info('Started Main')
+      logger.info(FOLDER_PATH)
+
+      for root, dirs, files in os.walk(FOLDER_PATH):
+        #print(f'{root}')
+        logger.info(root)
+
+        for file_name in files:
+          file_path = os.path.join(root, file_name)
+          # Check if the file name contains the partial name
+          del_flag = False
+
+          for partial_name in search_list:
+            if partial_name in file_name:
+              delete_file(file_path, logger)
+              del_flag = True
+
+            #if del_flag == False:
+             #print(f"Skipped - {file_path}")
+             #text = 'Skipped - ' + file_path
+             #logger.info(text)
+
+      logger.info('Finished')
+      #print('Finished')
+      logging.shutdown()
+
+if __name__ == '__main__':
+    main()
