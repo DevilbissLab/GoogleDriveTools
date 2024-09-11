@@ -1,0 +1,90 @@
+from pydrive2.auth import GoogleAuth
+from pydrive2.drive import GoogleDrive
+from google.colab import auth
+from oauth2client.client import GoogleCredentials
+import logging
+import os
+
+# prompt: access google drive
+from google.colab import drive
+try:
+  drive.mount('/gdrive')
+except Exception as e:
+  drive.mount('/gdrive', force_remount=True)
+  print(f"Failed to mount: {file_path}. Error: {e}")
+
+!ls "/gdrive/My Drive/"
+
+# Yes, I know. Here we are authenicating 2x in different ways. Not pretty but works. Also useful in that you must be sure that 
+# this is something you 'really' want to do.
+auth.authenticate_user()
+gauth = GoogleAuth()
+gauth.credentials = GoogleCredentials.get_application_default()
+my_drive = GoogleDrive(gauth)
+
+# Define the partial name you're looking for
+search_list = ['_CH1.tif','_CH2.tif','_CH3.tif','_CH4.tif', '_Overlay.tif', '.bucket.', '.index.', '.db.', '.idx.', '.counter.']  # Change this to your desired substring(s)
+DelAll = False
+GOOGLE_DRIVE_PATH = "/gdrive/My Drive/temp/"
+
+def main():
+  DelFlag = False
+
+  # Define a logger
+  logger = logging.getLogger('MyLogger')
+  logger.handlers.clear() #clear all current loggers.
+  logger.propagate = False # do not pass logs to the default logger
+
+  log_handler = logging.StreamHandler()
+  log_formatter = logging.Formatter('')
+  log_handler.setFormatter(log_formatter)
+  logger.addHandler(log_handler)
+  logger.setLevel(logging.INFO)
+
+  logf_handler = logging.FileHandler(GOOGLE_DRIVE_PATH + 'DeleteTrashScript.log', mode='a')
+  logf_format = logging.Formatter('%(asctime)s - %(message)s')
+  logf_handler.setFormatter(logf_format)
+  logger.addHandler(logf_handler)
+  logf_handler.setLevel(logging.DEBUG)
+
+  logger.info('Started Main')
+  logger.info(GOOGLE_DRIVE_PATH)
+
+  for file_list in my_drive.ListFile({'q': 'trashed=true', 'maxResults': 1000}):
+    logger.info('Received %s files from Files.list()' % len(file_list))
+    for cur_file in file_list:
+      if DelAll: # Regardless of file type
+        try:
+          logger.info('DelAll - size: %s, title: %s, id: %s' % (cur_file['fileSize'], cur_file['title'], cur_file['id']))
+          cur_file.Delete()
+          #return
+        except Exception as e:
+          logger.info(f"Failed to delete file: , {cur_file['title']}. Error: {e}")
+
+      else:
+        # Check if the file name contains the partial name
+        for partial_name in search_list:
+          if partial_name in cur_file['title']:
+            try:
+                #logger.info('Deleting - size: %s, title: %s, id: %s' % (cur_file['fileSize'], cur_file['title'], cur_file['id']))
+                cur_file.Delete()
+                #breakpoint
+                #return
+                DelFlag = True
+            except Exception as e:
+                logger.info(f"Failed to delete file: , {cur_file['title']}. Error: {e}")
+
+        if DelFlag:
+          logger.info('Deleted - size: %s, title: %s, id: %s' % (cur_file['fileSize'], cur_file['title'], cur_file['id']))
+        else:
+          try:
+            logger.info('File - size: %s, title: %s, id: %s' % (cur_file['fileSize'], cur_file['title'], cur_file['id']))
+          except:
+            logger.info('File - size: NA, title: %s, id: %s' % (cur_file['title'], cur_file['id']))
+        DelFlag = False
+
+  logger.info('Finished')
+  logging.shutdown()
+
+if __name__ == '__main__':
+    main()
